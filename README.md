@@ -28,7 +28,6 @@ Violações de dados geram impactos financeiros e reputacionais. O objetivo é *
 
 ---
 
-$1
 
 ### 🔧 Snippet — Carregamento via URL (Google Sheets/CSV)
 
