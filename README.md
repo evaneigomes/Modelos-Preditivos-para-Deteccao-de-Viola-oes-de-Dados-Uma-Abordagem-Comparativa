@@ -438,7 +438,7 @@ print("- heatmap_mape.csv")
 
 > *Leitura crítica:* Em séries **agregadas** (Total Geral) e com **magnitude maior**, o **XGBoost** se destacou; já em setores com **padrões temporais complexos**, **LSTM/TCN** tendem a **superar** Prophet/SARIMA e, em alguns casos, competir com XGBoost. Diferenças de **split**, **tratamento de outliers** e **escolhas de hiperparâmetros** explicam variações pontuais.
 
-### 7.2 Insight prático
+### 7.2 Ações práticas
 
 * **Planejamento tático:** adotar **XGBoost** para séries **macro**/agregadas; recorrer a **LSTM/TCN** para **setores específicos** com dinâmica mais **não linear**.
 * **Setores críticos:** **BSR (Varejo)** exige estratégias alternativas (ex.: modelos hierárquicos, *external regressors*, *ensembles* especializados e *regime switching*).
