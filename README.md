@@ -1,4 +1,4 @@
-# MVP2 — Ciência de Dados
+# MVP2 — Privacidade e Segurança
 
 ## Comparação entre Deep Learning e Machine Learning na Previsão de Violações de Dados
 
