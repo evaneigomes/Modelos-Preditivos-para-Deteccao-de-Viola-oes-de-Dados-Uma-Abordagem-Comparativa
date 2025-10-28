@@ -9,7 +9,7 @@
 
 ---
 
-## Resumo
+## Resumo Executivo
 
 Este trabalho compara modelos de **Deep Learning** (LSTM, TCN) e de **Machine Learning**/estatísticos (Prophet, SARIMA, XGBoost) na previsão mensal de **violações de dados** por setor organizacional, usando a base **Privacy Rights Clearinghouse – Data Breach Chronology** (2010–2023). A avaliação usa **MAPE (%)** como métrica principal (complementada por **MAE** e **RMSE**). Em síntese: modelos de **redes neurais** tendem a apresentar **melhor acurácia** em setores com **padrões temporais mais complexos**, enquanto **XGBoost** mostra competitividade em séries mais **agregadas** e com **padrões suaves**. As conclusões e números setoriais detalhados constam nas seções de **Resultados** e **Conclusão**.
 
@@ -28,13 +28,53 @@ Violações de dados geram impactos financeiros e reputacionais. O objetivo é *
 
 ---
 
-## 2. Dataset
+$1
 
-**Fonte:** Privacy Rights Clearinghouse — *Data Breach Chronology*
-**Período:** 2010–2023 (anterior a 2010 desconsiderado por baixa consistência)
-**Periodicidade:** **Mensal (ME)** por tipo de organização
+### 🔧 Snippet — Carregamento via URL (Google Sheets/CSV)
 
-**Atributos principais:** `Date Breach` (data do incidente), colunas por setor como `BSF` (Serviços Financeiros), `BSO` (Outros Negócios), `BSR` (Varejo), `EDU` (Educação), `GOV` (Governo), `MED` (Saúde), `NGO` (ONGs), `UNKN` (Desconhecido) e `Total Geral`.
+```python
+import pandas as pd
+from urllib.parse import urlparse
+
+# 👉 Cole aqui a URL pública do Google Sheets (ou um CSV remoto)
+URL = "https://docs.google.com/spreadsheets/d/SEU_ID/export?format=xlsx"
+
+# Caso a URL seja do tipo .../edit?usp=sharing, troque por .../export?format=xlsx
+if "edit" in URL and "export" not in URL:
+    URL = URL.split("/edit")[0] + "/export?format=xlsx"
+
+# Leitura
+try:
+    df_raw = pd.read_excel(URL)
+except Exception:
+    # Fallback: CSV
+    df_raw = pd.read_csv(URL)
+
+# Visualização inicial
+print(df_raw.head())
+```
+
+### 🔧 Snippet — Seleção de colunas e padronização de nomes
+
+```python
+# Esperado: uma coluna de data e colunas de setores (BSF, BSO, BSR, EDU, GOV, MED, NGO, UNKN, Total Geral)
+# Ajuste o nome da coluna de data conforme o seu arquivo (ex.: 'Date Breach')
+DATE_COL = 'Date Breach'
+setores = ['BSF','BSO','BSR','EDU','GOV','MED','NGO','UNKN','Total Geral']
+
+# Garantir tipos corretos
+import numpy as np
+import pandas as pd
+
+df = df_raw.copy()
+df[DATE_COL] = pd.to_datetime(df[DATE_COL], errors='coerce')
+df = df.dropna(subset=[DATE_COL]).sort_values(DATE_COL)
+
+# Forçar inteiros não-negativos nos setores
+for c in setores:
+    if c in df.columns:
+        df[c] = pd.to_numeric(df[c], errors='coerce').fillna(0).clip(lower=0).astype(int)
+```
 
 ---
 
@@ -55,47 +95,335 @@ Violações de dados geram impactos financeiros e reputacionais. O objetivo é *
 
 ---
 
-## 4. Preparação dos Dados
+$1
 
-* **Ajuste de datas**: padronização; descarte de datas incompletas; `YYYY-MM` → dia 1.
-* **Filtro temporal**: 2010-01 a 2023-12.
-* **Agregação**: reamostragem **mensal (ME)** por setor.
-* **Outliers**: remoção por **IQR** (Q1−1,5×IQR; Q3+1,5×IQR).
-* **Expoente de Hurst**: diagnóstico de persistência/reversão/aleatoriedade.
+### 🔧 Snippet — Filtro temporal, agregação mensal e limpeza básica
 
-> *Observação:* As transformações foram aplicadas **após** consolidação por setor, mantendo consistência entre modelos.
+```python
+# Recorte 2010–2023 e índice temporal
+inicio, fim = pd.Timestamp('2010-01-01'), pd.Timestamp('2023-12-31')
+mask = (df[DATE_COL] >= inicio) & (df[DATE_COL] <= fim)
+df = df.loc[mask].copy()
+
+# Agregação mensal (soma de incidentes por mês)
+df['month'] = df[DATE_COL].dt.to_period('M').dt.to_timestamp()
+df_mensal = (df.groupby('month')[setores]
+               .sum()
+               .asfreq('MS')
+               .fillna(0)
+               .astype(int))
+
+df_mensal.head()
+```
+
+### 🔧 Snippet — Tratamento de outliers por IQR (winsorização por setor)
+
+```python
+def winsorize_iqr(s):
+    q1, q3 = s.quantile(0.25), s.quantile(0.75)
+    iqr = q3 - q1
+    low, high = q1 - 1.5*iqr, q3 + 1.5*iqr
+    return s.clip(lower=max(0, low), upper=max(high, 0))
+
+for c in setores:
+    df_mensal[c] = winsorize_iqr(df_mensal[c])
+```
+
+### 🔧 Snippet — Expoente de Hurst (diagnóstico)
+
+```python
+import numpy as np
+
+def hurst_exponent(ts):
+    # Implementação simples de R/S (aproximação)
+    ts = np.asarray(ts, dtype=float)
+    N = len(ts)
+    if N < 20:
+        return np.nan
+    lags = np.floor(np.logspace(1, np.log10(N/2), num=20)).astype(int)
+    tau = []
+    for lag in lags:
+        diffs = ts[lag:] - ts[:-lag]
+        tau.append(np.sqrt(np.std(diffs)))
+    # Ajuste log-log
+    x = np.log(lags)
+    y = np.log(tau)
+    H = np.polyfit(x, y, 1)[0]
+    return max(min(H, 1.0), 0.0)
+
+for c in setores:
+    H = hurst_exponent(df_mensal[c].values)
+    print(f"Hurst[{c}]: {H:.2f}")
+```
+
+### 🔧 Snippet — Split temporal (treino vs. teste)
+
+```python
+TEST_SIZE = 24  # meses
+
+split_idx = len(df_mensal) - TEST_SIZE
+train_idx = df_mensal.index[:split_idx]
+test_idx  = df_mensal.index[split_idx:]
+
+print(train_idx[0], '→', train_idx[-1], '| test:', test_idx[0], '→', test_idx[-1])
+```
 
 ---
 
-## 5. Modelos e Treinamento
+$1
 
-**Modelos avaliados:**
+> Abaixo, trechos compactos por família de modelos. Nos notebooks finais, essas funções são chamadas em *loops* por setor, com *grid/tuning* quando aplicável.
 
-* **Prophet** (aditivo; sazonalidade; *changepoints*);
-* **SARIMA** (componentes sazonais);
-* **XGBoost Regressor** (lags, janelas deslizantes e *boosting* gradiente);
-* **LSTM** (memória de longo prazo, *look_back*);
-* **TCN** (convoluções causais dilatadas).
+### 🔧 Comum — Métricas e utilitários
 
-**Esboço de hiperparâmetros** (ajustados por setor):
+```python
+from sklearn.metrics import mean_absolute_error, mean_squared_error
+import numpy as np
+import pandas as pd
 
-* **SARIMA**: varredura em (p, d, q) × (P, D, Q, s=12).
-* **Prophet**: sazonalidade anual/mensal; *changepoints* e Fourier.
-* **XGBoost**: `n_estimators`, `max_depth`, `learning_rate`, *lags* e *window size*.
-* **LSTM/TCN**: `look_back` (ex.: 6/12/18), `epochs`, `batch_size`; *early stopping* opcional.
+def mape(y_true, y_pred, eps=1e-8):
+    y_true = np.asarray(y_true, dtype=float)
+    y_pred = np.asarray(y_pred, dtype=float)
+    denom = np.maximum(np.abs(y_true), eps)
+    return np.mean(np.abs((y_true - y_pred) / denom)) * 100
 
-**Treino/Teste:** divisão temporal com **teste nos últimos 24 meses** (padrão), mantendo séries alinhadas entre modelos. Ajustes finos por setor quando necessário.
+RESULTS = []  # coleciona dicionários de resultados
+```
+
+### 🔧 Prophet
+
+```python
+from prophet import Prophet
+
+def run_prophet(serie, test_size=24):
+    y = serie.reset_index().rename(columns={'month':'ds', serie.name:'y'})
+    train, test = y.iloc[:-test_size], y.iloc[-test_size:]
+    m = Prophet(yearly_seasonality=True, weekly_seasonality=False, daily_seasonality=False)
+    m.fit(train)
+    future = m.make_future_dataframe(periods=test_size, freq='MS')
+    fcst = m.predict(future).tail(test_size)
+    y_true = test['y'].values
+    y_pred = fcst['yhat'].values
+    return {
+        'Setor': serie.name,
+        'Modelo': 'Prophet',
+        'MAE': mean_absolute_error(y_true, y_pred),
+        'RMSE': np.sqrt(mean_squared_error(y_true, y_pred)),
+        'MAPE (%)': mape(y_true, y_pred)
+    }
+```
+
+### 🔧 SARIMA (statsmodels)
+
+```python
+import itertools
+from statsmodels.tsa.statespace.sarimax import SARIMAX
+
+def run_sarima(serie, test_size=24, p=1,d=0,q=1,P=1,D=1,Q=1,s=12):
+    y_train = serie.iloc[:-test_size]
+    y_test  = serie.iloc[-test_size:]
+    model = SARIMAX(y_train, order=(p,d,q), seasonal_order=(P,D,Q,s), enforce_stationarity=False, enforce_invertibility=False)
+    res = model.fit(disp=False)
+    pred = res.get_forecast(steps=test_size).predicted_mean
+    y_true = y_test.values
+    y_pred = pred.values
+    return {
+        'Setor': serie.name,
+        'Modelo': 'SARIMA',
+        'MAE': mean_absolute_error(y_true, y_pred),
+        'RMSE': np.sqrt(mean_squared_error(y_true, y_pred)),
+        'MAPE (%)': mape(y_true, y_pred)
+    }
+```
+
+### 🔧 XGBoost (lags)
+
+```python
+from xgboost import XGBRegressor
+
+def make_lagged_df(serie, lags=12):
+    df = pd.DataFrame({'y': serie.values}, index=serie.index)
+    for L in range(1, lags+1):
+        df[f'lag_{L}'] = df['y'].shift(L)
+    return df.dropna()
+
+def run_xgb(serie, test_size=24, lags=12):
+    df_l = make_lagged_df(serie, lags)
+    X, y = df_l.drop(columns=['y']).values, df_l['y'].values
+    X_train, X_test = X[:-test_size], X[-test_size:]
+    y_train, y_test = y[:-test_size], y[-test_size:]
+    model = XGBRegressor(n_estimators=500, max_depth=4, learning_rate=0.05, subsample=0.9, colsample_bytree=0.9, random_state=42)
+    model.fit(X_train, y_train)
+    y_pred = model.predict(X_test)
+    return {
+        'Setor': serie.name,
+        'Modelo': 'XGBoost',
+        'MAE': mean_absolute_error(y_test, y_pred),
+        'RMSE': np.sqrt(mean_squared_error(y_test, y_pred)),
+        'MAPE (%)': mape(y_test, y_pred)
+    }
+```
+
+### 🔧 LSTM (Keras)
+
+```python
+import numpy as np
+from sklearn.preprocessing import MinMaxScaler
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import LSTM, Dense
+from tensorflow.keras.callbacks import EarlyStopping
+
+def make_supervised(arr, look_back=12):
+    X, y = [], []
+    for i in range(len(arr) - look_back):
+        X.append(arr[i:i+look_back])
+        y.append(arr[i+look_back])
+    X, y = np.array(X), np.array(y)
+    return X[..., np.newaxis], y  # (samples, timesteps, features=1)
+
+def run_lstm(serie, test_size=24, look_back=12, epochs=200, batch_size=32):
+    values = serie.values.astype(float)
+    scaler = MinMaxScaler()
+    vals = scaler.fit_transform(values.reshape(-1,1)).ravel()
+
+    X, y = make_supervised(vals, look_back)
+    X_train, X_test = X[:-test_size], X[-test_size:]
+    y_train, y_test = y[:-test_size], y[-test_size:]
+
+    model = Sequential([
+        LSTM(64, input_shape=(look_back, 1)),
+        Dense(1)
+    ])
+    model.compile(optimizer='adam', loss='mse')
+    es = EarlyStopping(patience=10, restore_best_weights=True, monitor='val_loss')
+    model.fit(X_train, y_train, validation_split=0.2, epochs=epochs, batch_size=batch_size, callbacks=[es], verbose=0)
+
+    y_pred = model.predict(X_test).ravel()
+    # inversão para escala original
+    y_test_inv = scaler.inverse_transform(y_test.reshape(-1,1)).ravel()
+    y_pred_inv = scaler.inverse_transform(y_pred.reshape(-1,1)).ravel()
+
+    return {
+        'Setor': serie.name,
+        'Modelo': 'LSTM',
+        'MAE': mean_absolute_error(y_test_inv, y_pred_inv),
+        'RMSE': np.sqrt(mean_squared_error(y_test_inv, y_pred_inv)),
+        'MAPE (%)': mape(y_test_inv, y_pred_inv)
+    }
+```
+
+### 🔧 TCN (Temporal Convolutional Network)
+
+```python
+from tcn import TCN
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Dense
+
+# Reutiliza make_supervised do LSTM (mesmo formato)
+
+def run_tcn(serie, test_size=24, look_back=12, epochs=200, batch_size=32):
+    values = serie.values.astype(float)
+    scaler = MinMaxScaler()
+    vals = scaler.fit_transform(values.reshape(-1,1)).ravel()
+
+    X, y = make_supervised(vals, look_back)
+    X_train, X_test = X[:-test_size], X[-test_size:]
+    y_train, y_test = y[:-test_size], y[-test_size:]
+
+    model = Sequential([
+        TCN(nb_filters=64, kernel_size=3, dilations=[1,2,4,8], dropout_rate=0.1, return_sequences=False, input_shape=(look_back,1)),
+        Dense(1)
+    ])
+    model.compile(optimizer='adam', loss='mse')
+    es = EarlyStopping(patience=10, restore_best_weights=True, monitor='val_loss')
+    model.fit(X_train, y_train, validation_split=0.2, epochs=epochs, batch_size=batch_size, callbacks=[es], verbose=0)
+
+    y_pred = model.predict(X_test).ravel()
+    y_test_inv = scaler.inverse_transform(y_test.reshape(-1,1)).ravel()
+    y_pred_inv = scaler.inverse_transform(y_pred.reshape(-1,1)).ravel()
+
+    return {
+        'Setor': serie.name,
+        'Modelo': 'TCN',
+        'MAE': mean_absolute_error(y_test_inv, y_pred_inv),
+        'RMSE': np.sqrt(mean_squared_error(y_test_inv, y_pred_inv)),
+        'MAPE (%)': mape(y_test_inv, y_pred_inv)
+    }
+```
+
+### 🔧 Loop por setor e consolidação de resultados
+
+```python
+RESULTS = []
+for c in setores:
+    serie = df_mensal[c]
+    try:
+        RESULTS.append(run_prophet(serie, test_size=TEST_SIZE))
+    except Exception as e:
+        print(f"Prophet falhou em {c}:", e)
+    try:
+        RESULTS.append(run_sarima(serie, test_size=TEST_SIZE))
+    except Exception as e:
+        print(f"SARIMA falhou em {c}:", e)
+    try:
+        RESULTS.append(run_xgb(serie, test_size=TEST_SIZE))
+    except Exception as e:
+        print(f"XGB falhou em {c}:", e)
+    try:
+        RESULTS.append(run_lstm(serie, test_size=TEST_SIZE))
+    except Exception as e:
+        print(f"LSTM falhou em {c}:", e)
+    try:
+        RESULTS.append(run_tcn(serie, test_size=TEST_SIZE))
+    except Exception as e:
+        print(f"TCN falhou em {c}:", e)
+
+import pandas as pd
+
+df_results = pd.DataFrame(RESULTS)
+print(df_results.head())
+```
 
 ---
 
-## 6. Avaliação e Métricas
+$1
 
-* **MAPE (%)** — métrica principal (interpretação proporcional entre setores).
-* **MAE** — erro absoluto (escala original).
-* **RMSE** — penaliza erros grandes.
+### 🔧 Snippet — Tabelas, heatmap e melhores por setor
 
-**Classificação do MAPE (Lewis, 1982):**
-<10: *Altamente preciso*; 10–19,99: *Boa previsão*; 20–49,99: *Razoável*; ≥50: *Imprecisa*.
+```python
+# Tabela geral
+summary = (df_results
+           .groupby(['Setor','Modelo'])[['MAE','RMSE','MAPE (%)']]
+           .mean()
+           .reset_index())
+
+# Melhor por setor com base no MAPE
+melhores = summary.loc[summary.groupby('Setor')['MAPE (%)'].idxmin()].reset_index(drop=True)
+print("
+🏆 Melhor MAPE por setor:
+", melhores)
+
+# Heatmap simples (matriz Setor x Modelo com MAPE)
+pivot_mape = summary.pivot(index='Setor', columns='Modelo', values='MAPE (%)')
+print("
+Matriz MAPE (Setor x Modelo):
+", pivot_mape.round(2))
+```
+
+### 🔧 Snippet — Salvamento padronizado dos CSVs (sem timestamp)
+
+```python
+# Salva resultados no /content com nomes estáveis
+summary.to_csv('/content/resultados_comparados.csv', index=False)
+melhores.to_csv('/content/melhor_modelo_por_setor.csv', index=False)
+pivot_mape.to_csv('/content/heatmap_mape.csv')
+
+print("
+💾 Arquivos salvos em /content:")
+print("- resultados_comparados.csv")
+print("- melhor_modelo_por_setor.csv")
+print("- heatmap_mape.csv")
+```
 
 ---
 
@@ -157,11 +485,24 @@ Violações de dados geram impactos financeiros e reputacionais. O objetivo é *
 
 ---
 
-## 10. Reprodutibilidade
+$1
 
-* **Notebook Colab (público):** *[inserir link do seu notebook vfinal]*
-* **Carregamento do dataset**: via **URL** no próprio notebook (sem configuração externa).
-* **Saídas**: CSVs por modelo (ex.: `resultados_prophet.csv`, `resultados_sarima.csv`, `resultados_xgb.csv`, `resultados_lstm.csv`, `resultados_tcn.csv`), imagens (heatmap e comparações).
+### 🔧 Snippet — Organização dos artefatos de saída
+
+```python
+# Organização final dos artefatos gerados no notebook
+# (ajuste conforme desejar)
+ARQUIVOS = {
+    'comparacao_geral': '/content/resultados_comparados.csv',
+    'melhores_por_setor': '/content/melhor_modelo_por_setor.csv',
+    'heatmap_mape': '/content/heatmap_mape.csv'
+}
+
+for k, v in ARQUIVOS.items():
+    print(f"{k:>20}: {v}")
+```
+
+> **Nota:** Caso prefira salvar no Drive, basta montar o Drive no Colab e alterar os caminhos para `'/content/drive/MyDrive/...'`. Nesta versão mantivemos **nomes fixos (sem timestamp)** em **`/content`**, conforme seu padrão.
 
 ---
 
