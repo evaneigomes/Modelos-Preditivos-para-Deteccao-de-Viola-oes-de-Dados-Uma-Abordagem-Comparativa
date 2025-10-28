@@ -32,13 +32,13 @@ Violações de dados geram impactos financeiros e reputacionais. O objetivo é *
 ---
 
 
-### 🔧 Snippet — Carregamento via URL (Google Sheets/CSV)
+### Carregamento via URL (Google Sheets/CSV)
 
 ```python
 import pandas as pd
 from urllib.parse import urlparse
 
-# 👉 Cole aqui a URL pública do Google Sheets (ou um CSV remoto)
+# Cole aqui a URL pública do Google Sheets (ou um CSV remoto)
 URL = "https://docs.google.com/spreadsheets/d/SEU_ID/export?format=xlsx"
 
 # Caso a URL seja do tipo .../edit?usp=sharing, troque por .../export?format=xlsx
@@ -56,7 +56,7 @@ except Exception:
 print(df_raw.head())
 ```
 
-### 🔧 Snippet — Seleção de colunas e padronização de nomes
+### Seleção de colunas e padronização de nomes
 
 ```python
 # Esperado: uma coluna de data e colunas de setores (BSF, BSO, BSR, EDU, GOV, MED, NGO, UNKN, Total Geral)
@@ -84,8 +84,8 @@ for c in setores:
 
 **Arquitetura analítica** (alto nível):
 
-1. **EDA** e diagnóstico de séries;
-2. **Preparação** (limpeza, padronização de datas, filtro temporal 2010–2023, **reamostragem mensal**, remoção de **outliers por IQR**, cálculo do **expoente de Hurst** para checar persistência/aleatoriedade);
+1. **Preparação** (limpeza, padronização de datas, filtro temporal 2010–2023, **reamostragem mensal**;
+2. **Remoção de outliers por IQR**, cálculo do **expoente de Hurst** para checar persistência/aleatoriedade);
 3. **Divisão treino/teste** com **janela temporal fixa** (hold-out nos últimos meses), opcionalmente com **validação cruzada temporal** quando cabível;
 4. **Modelagem**: Prophet, SARIMA, XGBoost, LSTM, TCN;
 5. **Otimização** por *grid search* e ajustes finos por família;
@@ -97,8 +97,7 @@ for c in setores:
 
 ---
 
-
-### 🔧 Snippet — Filtro temporal, agregação mensal e limpeza básica
+### Filtro temporal, agregação mensal e limpeza básica
 
 ```python
 # Recorte 2010–2023 e índice temporal
@@ -117,7 +116,7 @@ df_mensal = (df.groupby('month')[setores]
 df_mensal.head()
 ```
 
-### 🔧 Snippet — Tratamento de outliers por IQR (winsorização por setor)
+### Tratamento de outliers por IQR (winsorização por setor)
 
 ```python
 def winsorize_iqr(s):
@@ -130,7 +129,7 @@ for c in setores:
     df_mensal[c] = winsorize_iqr(df_mensal[c])
 ```
 
-### 🔧 Snippet — Expoente de Hurst (diagnóstico)
+### Expoente de Hurst (diagnóstico)
 
 ```python
 import numpy as np
@@ -157,7 +156,7 @@ for c in setores:
     print(f"Hurst[{c}]: {H:.2f}")
 ```
 
-### 🔧 Snippet — Split temporal (treino vs. teste)
+### Split temporal (treino vs. teste)
 
 ```python
 TEST_SIZE = 24  # meses
@@ -174,7 +173,7 @@ print(train_idx[0], '→', train_idx[-1], '| test:', test_idx[0], '→', test_id
 
 > Abaixo, trechos compactos por família de modelos. Nos notebooks finais, essas funções são chamadas em *loops* por setor, com *grid/tuning* quando aplicável.
 
-### 🔧 Comum — Métricas e utilitários
+### Métricas e utilitários
 
 ```python
 from sklearn.metrics import mean_absolute_error, mean_squared_error
@@ -190,7 +189,7 @@ def mape(y_true, y_pred, eps=1e-8):
 RESULTS = []  # coleciona dicionários de resultados
 ```
 
-### 🔧 Prophet
+### Prophet
 
 ```python
 from prophet import Prophet
@@ -213,7 +212,7 @@ def run_prophet(serie, test_size=24):
     }
 ```
 
-### 🔧 SARIMA (statsmodels)
+### SARIMA (statsmodels)
 
 ```python
 import itertools
@@ -236,7 +235,7 @@ def run_sarima(serie, test_size=24, p=1,d=0,q=1,P=1,D=1,Q=1,s=12):
     }
 ```
 
-### 🔧 XGBoost (lags)
+### XGBoost (lags)
 
 ```python
 from xgboost import XGBRegressor
@@ -264,7 +263,7 @@ def run_xgb(serie, test_size=24, lags=12):
     }
 ```
 
-### 🔧 LSTM (Keras)
+### LSTM (Keras)
 
 ```python
 import numpy as np
@@ -312,7 +311,7 @@ def run_lstm(serie, test_size=24, look_back=12, epochs=200, batch_size=32):
     }
 ```
 
-### 🔧 TCN (Temporal Convolutional Network)
+### TCN (Temporal Convolutional Network)
 
 ```python
 from tcn import TCN
@@ -351,7 +350,7 @@ def run_tcn(serie, test_size=24, look_back=12, epochs=200, batch_size=32):
     }
 ```
 
-### 🔧 Loop por setor e consolidação de resultados
+### Loop por setor e consolidação de resultados
 
 ```python
 RESULTS = []
@@ -387,7 +386,7 @@ print(df_results.head())
 ---
 
 
-### 🔧 Snippet — Tabelas, heatmap e melhores por setor
+### Tabelas, heatmap e melhores por setor
 
 ```python
 # Tabela geral
@@ -409,7 +408,7 @@ Matriz MAPE (Setor x Modelo):
 ", pivot_mape.round(2))
 ```
 
-### 🔧 Snippet — Salvamento padronizado dos CSVs (sem timestamp)
+### Salvamento padronizado dos CSVs (sem timestamp)
 
 ```python
 # Salva resultados no /content com nomes estáveis
@@ -423,7 +422,6 @@ print("- resultados_comparados.csv")
 print("- melhor_modelo_por_setor.csv")
 print("- heatmap_mape.csv")
 ```
-
 ---
 
 ## 7. Resultados e Discussão
@@ -484,7 +482,7 @@ print("- heatmap_mape.csv")
 
 ---
 
-### 🔧 Snippet — Organização dos artefatos de saída
+### Organização dos artefatos de saída
 
 ```python
 # Organização final dos artefatos gerados no notebook
@@ -499,10 +497,6 @@ for k, v in ARQUIVOS.items():
     print(f"{k:>20}: {v}")
 ```
 
-> **Nota:** Caso prefira salvar no Drive, basta montar o Drive no Colab e alterar os caminhos para `'/content/drive/MyDrive/...'`. Nesta versão mantivemos **nomes fixos (sem timestamp)** em **`/content`**, conforme seu padrão.
-
----
-
 ## 11. Referências
 
 * Privacy Rights Clearinghouse — *Data Breach Chronology*.
@@ -510,5 +504,3 @@ for k, v in ARQUIVOS.items():
 * Materiais de apoio da disciplina (requisitos de entrega e checklist).
 
 ---
-
-> **Observação final ao avaliador:** Este documento é o “relatório” em formato Markdown. As células de texto do *notebook Colab* repetem as seções explicativas, seguidas das células de código que reproduzem cada etapa (preparo, treino, avaliação e gráficos). O *link Colab* e as figuras/CSVs finais serão apontados ao final da execução completa do notebook vfinal.
