@@ -9,7 +9,7 @@
 
 ---
 
-## Resumo Executivo
+## Resumo
 
 Este trabalho compara modelos de **Deep Learning** (LSTM, TCN) e de **Machine Learning**/estatísticos (Prophet, SARIMA, XGBoost) na previsão mensal de **violações de dados** por setor organizacional, usando a base **Privacy Rights Clearinghouse – Data Breach Chronology** (2010–2023). A avaliação usa **MAPE (%)** como métrica principal (complementada por **MAE** e **RMSE**). Em síntese: modelos de **redes neurais** tendem a apresentar **melhor acurácia** em setores com **padrões temporais mais complexos**, enquanto **XGBoost** mostra competitividade em séries mais **agregadas** e com **padrões suaves**. As conclusões e números setoriais detalhados constam nas seções de **Resultados** e **Conclusão**.
 
