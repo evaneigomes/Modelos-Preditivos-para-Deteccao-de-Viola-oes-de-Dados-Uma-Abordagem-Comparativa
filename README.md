@@ -1,10 +1,13 @@
 # MVP2 — Ciência de Dados
 
-## Comparação entre Deep Learning e Machine Learning na Previsão de Violações de Dados (2010–2023)
+## Comparação entre Deep Learning e Machine Learning na Previsão de Violações de Dados
 
 **Discente:** Evanei Gomes dos Santos
+
 **Docente:** Prof. Dr. André Luiz Marques Serrano
+
 **Curso:** PPEE/UnB — Engenharia Elétrica
+
 **Entrega:** Notebook público no Google Colab (link ao final)
 
 ---
