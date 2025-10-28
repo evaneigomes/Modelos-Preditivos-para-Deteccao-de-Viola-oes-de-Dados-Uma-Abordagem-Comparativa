@@ -496,11 +496,3 @@ ARQUIVOS = {
 for k, v in ARQUIVOS.items():
     print(f"{k:>20}: {v}")
 ```
-
-## 11. Referências
-
-* Privacy Rights Clearinghouse — *Data Breach Chronology*.
-* Literatura de séries temporais e cibersegurança (detalhes no artigo base).
-* Materiais de apoio da disciplina (requisitos de entrega e checklist).
-
----
