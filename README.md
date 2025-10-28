@@ -94,7 +94,6 @@ for c in setores:
 
 ---
 
-$1
 
 ### 🔧 Snippet — Filtro temporal, agregação mensal e limpeza básica
 
@@ -169,7 +168,6 @@ print(train_idx[0], '→', train_idx[-1], '| test:', test_idx[0], '→', test_id
 
 ---
 
-$1
 
 > Abaixo, trechos compactos por família de modelos. Nos notebooks finais, essas funções são chamadas em *loops* por setor, com *grid/tuning* quando aplicável.
 
@@ -385,7 +383,6 @@ print(df_results.head())
 
 ---
 
-$1
 
 ### 🔧 Snippet — Tabelas, heatmap e melhores por setor
 
@@ -483,8 +480,6 @@ print("- heatmap_mape.csv")
 **Melhor solução**: seleção por **setor**; sugerido **comitê** por contexto.
 
 ---
-
-$1
 
 ### 🔧 Snippet — Organização dos artefatos de saída
 
